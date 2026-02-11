@@ -1,4 +1,108 @@
+/* ==============================
+   GLOBAL
+============================== */
+
 body {
-    background-color: black;
-    color: bisque;
+  margin: 0;
+  padding: 20px;
+  background-color: #0a0a0a;
+  color: #e0e0e0;
+  font-family: "Courier New", monospace;
+  text-align: center;
+}
+
+h1 {
+  margin-bottom: 25px;
+  font-size: 2.5rem;
+  color: #00ffcc;
+  text-shadow: 0 0 8px #00ffcc44;
+}
+
+/* ==============================
+   PANELS
+============================== */
+
+.section {
+  background-color: #141414;
+  border: 1px solid #2a2a2a;
+  padding: 20px;
+  margin: 20px auto;
+  width: 70%;
+  border-radius: 8px;
+  box-shadow: 0 0 15px #000000aa;
+}
+
+/* ==============================
+   BUTTONS
+============================== */
+
+button {
+  background-color: #1f1f1f;
+  color: #00ffcc;
+  border: 1px solid #00ffcc55;
+  padding: 8px 18px;
+  margin: 5px;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  background-color: #00ffcc;
+  color: black;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ==============================
+   INPUTS
+============================== */
+
+input {
+  background-color: #1c1c1c;
+  color: #ffffff;
+  border: 1px solid #333;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+/* ==============================
+   PLAYER PANELS
+============================== */
+
+#players div {
+  background-color: #1a1a1a;
+  border: 1px solid #333;
+  margin: 8px;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+/* Highlight current turn */
+.current-turn {
+  border: 1px solid #00ffcc;
+  box-shadow: 0 0 10px #00ffcc55;
+}
+
+/* ==============================
+   DEALER AREA
+============================== */
+
+#dealer {
+  font-size: 1.2rem;
+  margin-top: 10px;
+}
+
+/* ==============================
+   TIMER
+============================== */
+
+#timer {
+  font-size: 1.4rem;
+  color: #ff4d4d;
+  text-shadow: 0 0 6px #ff000044;
 }
