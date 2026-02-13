@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <title>Multiplayer Blackjack</title>
-  <link rel="stylesheet" href="style.css" />
+  <script src="script.js" defer></script>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
@@ -15,36 +16,36 @@
     <button onclick="joinGame()">Join</button>
   </div>
 
-  <div class="section">
+  <div class="section" id="lobby">
     <button onclick="startGame()">Start Game</button>
   </div>
 
-  <div class="section">
-    <h2>Place Bet</h2>
-    <input id="betInput" type="number" placeholder="Bet amount" />
-    <button onclick="placeBet()">Place Bet</button>
+  <section id="game">
+    <div class="section">
+      <h2>Place Bet</h2>
+      <input id="betInput" type="number" placeholder="Bet amount" />
+      <button onclick="placeBet()">Place Bet</button>
   </div>
-
+  
   <div class="section">
     <h2>Your Turn</h2>
     <button onclick="hit()">Hit</button>
     <button onclick="stand()">Stand</button>
   </div>
-
+  
   <div class="section">
     <h2 id="timer"></h2>
   </div>
-
+  
   <div class="section">
     <h2>Dealer</h2>
     <div id="dealer"></div>
   </div>
-
+  
   <div class="section">
     <h2>Players</h2>
     <div id="players"></div>
   </div>
-
-  <script src="script.js"></script>
+</section>
 </body>
 </html>

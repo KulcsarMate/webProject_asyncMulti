@@ -2,6 +2,10 @@
    GLOBAL
 ============================== */
 
+section, #lobby {
+  display: none;
+}
+
 body {
   margin: 0;
   padding: 20px;
@@ -106,3 +110,4 @@ input {
   color: #ff4d4d;
   text-shadow: 0 0 6px #ff000044;
 }
+

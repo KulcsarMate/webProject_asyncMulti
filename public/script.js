@@ -17,6 +17,7 @@ async function joinGame() {
 
 async function startGame() {
   await fetch("/start", { method: "POST" });
+  
 }
 
 
