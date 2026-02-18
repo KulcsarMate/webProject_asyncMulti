@@ -89,39 +89,63 @@ app.post("/start", (req, res) => {
 
 app.post("/place-bet", (req, res) => {
   const { playerId, amount } = req.body;
-  const player = game.players[playerId];
 
-  if (!player || game.state !== "betting") return res.json(game);
-  if (amount > player.chips || amount <= 0) return res.json(game);
+  const player = game.players[playerId];
+  if (!player) return res.sendStatus(400);
 
   player.bet = amount;
   player.chips -= amount;
 
-  if (game.turnOrder.every(id => game.players[id].bet > 0)) {
+  const allBet = Object.values(game.players).every(p => p.bet > 0);
+
+  if (allBet) {
     startRound();
   }
 
-  res.json(game);
+  res.json({ success: true });
 });
 
+function shuffle(deck) {
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+}
+
+function drawCard() {
+  return game.deck.pop();
+}
 
 function startRound() {
-  game.state = "playing";
   game.deck = createDeck();
-  game.dealer.hand = [];
-  game.currentTurnIndex = 0;
+  shuffle(game.deck);
 
-  for (let id of game.turnOrder) {
+  game.dealer.hand = [];
+  game.turnOrder = [];
+  game.currentTurnIndex = 0;
+  game.roundOver = false;
+
+  // Deal 2 cards to each player
+  for (let id in game.players) {
     const player = game.players[id];
-    player.hand = [game.deck.pop(), game.deck.pop()];
-    player.stood = false;
-    player.busted = false;
+    player.hand = [];
     player.result = null;
+
+    player.hand.push(drawCard());
+    player.hand.push(drawCard());
+
+    game.turnOrder.push(id);
   }
 
-  game.dealer.hand = [game.deck.pop(), game.deck.pop()];
-  startTurnTimer();
+  // Deal 2 cards to dealer
+  game.dealer.hand.push(drawCard());
+  game.dealer.hand.push(drawCard());
+
+  // Start turn timer
+  game.turnEndsAt = Date.now() + 15000;
 }
+
 
 
 function startTurnTimer() {

@@ -51,6 +51,34 @@ async function stand() {
   });
 }
 
+function getCardImagePath(card) {
+  const suitMap = {
+    "♠": "S",
+    "♥": "H",
+    "♦": "D",
+    "♣": "C",
+    "spades": "S",
+    "hearts": "H",
+    "diamonds": "D",
+    "clubs": "C"
+  };
+
+  const suit = suitMap[card.suit] || card.suit;
+  const value = card.value;
+
+  return `assets/${value}_${suit}.png`;
+}
+
+function handleTurnButtons(currentTurnPlayer) {
+  const hitBtn = document.getElementById("hitBtn");
+  const standBtn = document.getElementById("standBtn");
+
+  const isMyTurn = playerId === currentTurnPlayer;
+
+  hitBtn.disabled = !isMyTurn;
+  standBtn.disabled = !isMyTurn;
+}
+
 
 async function pollState() {
   while (true) {
@@ -63,16 +91,6 @@ async function pollState() {
 }
 
 pollState();
-
-function handleTurnButtons(currentTurnPlayer) {
-  const hitBtn = document.getElementById("hitBtn");
-  const standBtn = document.getElementById("standBtn");
-
-  const isMyTurn = playerId === currentTurnPlayer;
-
-  hitBtn.disabled = !isMyTurn;
-  standBtn.disabled = !isMyTurn;
-}
 
 
 function render() {
@@ -128,20 +146,33 @@ function renderGame() {
     const isCurrent = id === currentTurnPlayer;
 
     playersDiv.innerHTML += `
-      <div class="${isCurrent ? "current-turn" : ""}">
-        <strong>${p.name}</strong>
-        | Chips: ${p.chips}
-        | Bet: ${p.bet}
-        | Cards: ${p.hand.map(c => c.value + c.suit).join(" ")}
-        | Result: ${p.result || ""}
+    <div class="${isCurrent ? "current-turn" : ""}">
+      <strong>${p.name}</strong>
+      | Chips: ${p.chips}
+      | Bet: ${p.bet}
+      | Result: ${p.result || ""}
+
+      <div class="card-row">
+        ${p.hand.map(c =>
+          `<img class="card" src="${getCardImagePath(c)}">`).join("")}
       </div>
-    `;
+    </div>`;
   }
 
   // Dealer
   const dealerDiv = document.getElementById("dealer");
-  dealerDiv.innerHTML =
-    currentState.dealer.hand.map(c => c.value + c.suit).join(" ");
+  dealerDiv.innerHTML = `
+  <div class="card-row">
+    ${currentState.dealer.hand.map((c, i) => {
+
+      // Hide first dealer card if round not over
+      if (!currentState.roundOver && i === 0) {
+        return `<img class="card" src="assets/back.png">`;
+      }
+
+      return `<img class="card" src="${getCardImagePath(c)}">`;
+    }).join("")}
+  </div>`;
 
   handleTurnButtons(currentTurnPlayer);
   renderTurnTimer();
