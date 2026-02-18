@@ -10,7 +10,7 @@
 
   <h1>🃏 Multiplayer Blackjack</h1>
 
-  <div class="section">
+  <div class="section" id="joinScreen">
     <h2>Join Game</h2>
     <input id="nameInput" placeholder="Enter your name" />
     <button onclick="joinGame()">Join</button>
@@ -18,6 +18,10 @@
 
   <div class="section" id="lobby">
     <button onclick="startGame()">Start Game</button>
+    <br>Players:
+    <ul id="lobbyList">
+
+    </ul>
   </div>
 
   <section id="game">

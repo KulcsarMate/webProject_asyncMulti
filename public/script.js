@@ -12,12 +12,15 @@ async function joinGame() {
 
   const data = await res.json();
   playerId = data.playerId;
+  document.getElementById("joinScreen").style.display = "none";
+  document.getElementById("lobby").style.display = "block";
 }
 
 
 async function startGame() {
   await fetch("/start", { method: "POST" });
-  
+  document.getElementById("lobby").style.display = "none";
+  document.getElementById("game").style.display = "block";
 }
 
 
@@ -61,33 +64,26 @@ async function pollState() {
 
 pollState();
 
+function handleTurnButtons(currentTurnPlayer) {
+  const hitBtn = document.getElementById("hitBtn");
+  const standBtn = document.getElementById("standBtn");
+
+  const isMyTurn = playerId === currentTurnPlayer;
+
+  hitBtn.disabled = !isMyTurn;
+  standBtn.disabled = !isMyTurn;
+}
+
 
 function render() {
   if (!currentState) return;
 
-  const playersDiv = document.getElementById("players");
-  playersDiv.innerHTML = "";
-
-  for (let id in currentState.players) {
-    const p = currentState.players[id];
-
-    playersDiv.innerHTML += `
-      <div>
-        <strong>${p.name}</strong>
-        | Chips: ${p.chips}
-        | Bet: ${p.bet}
-        | Cards: ${p.hand.map(c => c.value + c.suit).join(" ")}
-        | Result: ${p.result || ""}
-      </div>
-    `;
+  if (!currentState.gameStarted) {
+    renderLobby();
+    return;
   }
 
-  const dealerDiv = document.getElementById("dealer");
-  dealerDiv.innerHTML =
-    "Dealer: " +
-    currentState.dealer.hand.map(c => c.value + c.suit).join(" ");
-
-  renderTurnTimer();
+  renderGame();
 }
 
 function renderTurnTimer() {
@@ -105,3 +101,50 @@ function renderTurnTimer() {
 
   timerDiv.innerText = `Time left: ${seconds}s`;
 }
+
+function renderLobby() {
+  const lobbyList = document.getElementById("lobbyList");
+  lobbyList.innerHTML = "";
+
+  for (let id in currentState.players) {
+    const p = currentState.players[id];
+    lobbyList.innerHTML += `
+  <li ${id === playerId ? 'style="color:#00ffcc;"' : ""}>
+    ${p.name} ${id === playerId ? "(You)" : ""}
+  </li>`;
+  }
+}
+
+function renderGame() {
+  const playersDiv = document.getElementById("gamePlayers");
+  playersDiv.innerHTML = "";
+
+  const currentTurnPlayer =
+    currentState.turnOrder?.[currentState.currentTurnIndex];
+
+  for (let id in currentState.players) {
+    const p = currentState.players[id];
+
+    const isCurrent = id === currentTurnPlayer;
+
+    playersDiv.innerHTML += `
+      <div class="${isCurrent ? "current-turn" : ""}">
+        <strong>${p.name}</strong>
+        | Chips: ${p.chips}
+        | Bet: ${p.bet}
+        | Cards: ${p.hand.map(c => c.value + c.suit).join(" ")}
+        | Result: ${p.result || ""}
+      </div>
+    `;
+  }
+
+  // Dealer
+  const dealerDiv = document.getElementById("dealer");
+  dealerDiv.innerHTML =
+    currentState.dealer.hand.map(c => c.value + c.suit).join(" ");
+
+  handleTurnButtons(currentTurnPlayer);
+  renderTurnTimer();
+}
+
+
