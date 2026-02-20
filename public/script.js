@@ -26,8 +26,8 @@ async function startGame() {
 
 async function placeBet() {
   const amount = parseInt(document.getElementById("betInput").value);
-
-  await fetch("/place-bet", {
+  console.log("CIGÁNY")
+  await fetch("http://localhost:3000/place-bet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId, amount })
@@ -84,7 +84,7 @@ async function pollState() {
   while (true) {
     const res = await fetch("/state");
     currentState = await res.json();
-
+    console.log("STATE:", currentState);
     render();
     await new Promise(r => setTimeout(r, 1000));
   }

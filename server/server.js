@@ -5,6 +5,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
+console.log("Server file loaded");
 
 let game = createGame();
 let turnTimer = null;
@@ -91,13 +92,13 @@ app.post("/place-bet", (req, res) => {
   const { playerId, amount } = req.body;
 
   const player = game.players[playerId];
+  console.log(playerId)
   if (!player) return res.sendStatus(400);
 
   player.bet = amount;
   player.chips -= amount;
 
   const allBet = Object.values(game.players).every(p => p.bet > 0);
-
   if (allBet) {
     startRound();
   }
@@ -142,6 +143,7 @@ function startRound() {
   game.dealer.hand.push(drawCard());
   game.dealer.hand.push(drawCard());
 
+  console.log(game.dealer.hand)
   // Start turn timer
   game.turnEndsAt = Date.now() + 15000;
 }
@@ -258,6 +260,9 @@ app.get("/state", (req, res) => {
   res.json(game);
 });
 
+app.get("/", (req, res) => {
+  res.send("Server is working!");
+});
 
 app.listen(3000, () => {
   console.log("Server running on http://localhost:3000");
