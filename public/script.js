@@ -1,8 +1,35 @@
+/* ===============================
+   GLOBAL STATE
+================================= */
+
 let playerId = null;
 let currentState = null;
 
+/* ===============================
+   POLLING (async / await)
+================================= */
+
+setInterval(fetchState, 1000);
+
+async function fetchState() {
+  try {
+    const res = await fetch("/state");
+    currentState = await res.json();
+    render();
+  } catch (err) {
+    console.error("Failed to fetch state:", err);
+  }
+}
+
+/* ===============================
+   JOIN GAME
+================================= */
+
 async function joinGame() {
-  const name = document.getElementById("nameInput").value;
+  const nameInput = document.getElementById("playerName");
+  const name = nameInput.value.trim();
+
+  if (!name) return alert("Enter a name");
 
   const res = await fetch("/join", {
     method: "POST",
@@ -12,28 +39,45 @@ async function joinGame() {
 
   const data = await res.json();
   playerId = data.playerId;
-  document.getElementById("joinScreen").style.display = "none";
-  document.getElementById("lobby").style.display = "block";
+  currentState = data;
+
+  render();
 }
 
+/* ===============================
+   START GAME
+================================= */
 
 async function startGame() {
   await fetch("/start", { method: "POST" });
-  document.getElementById("lobby").style.display = "none";
-  document.getElementById("game").style.display = "block";
 }
 
+/* ===============================
+   BETTING
+================================= */
 
 async function placeBet() {
-  const amount = parseInt(document.getElementById("betInput").value);
-  console.log("CIGÁNY")
-  await fetch("http://localhost:3000/place-bet", {
+  const betInput = document.getElementById("betAmount");
+  const amount = parseInt(betInput.value);
+
+  if (!amount || amount <= 0) {
+    alert("Enter valid bet");
+    return;
+  }
+
+  await fetch("/place-bet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ playerId, amount })
+    body: JSON.stringify({
+      playerId,
+      amount
+    })
   });
 }
 
+/* ===============================
+   HIT / STAND
+================================= */
 
 async function hit() {
   await fetch("/hit", {
@@ -51,131 +95,200 @@ async function stand() {
   });
 }
 
-function getCardImagePath(card) {
-  const suitMap = {
-    "♠": "S",
-    "♥": "H",
-    "♦": "D",
-    "♣": "C",
-    "spades": "S",
-    "hearts": "H",
-    "diamonds": "D",
-    "clubs": "C"
-  };
-
-  const suit = suitMap[card.suit] || card.suit;
-  const value = card.value;
-
-  return `assets/${value}_${suit}.png`;
-}
-
-function handleTurnButtons(currentTurnPlayer) {
-  const hitBtn = document.getElementById("hitBtn");
-  const standBtn = document.getElementById("standBtn");
-
-  const isMyTurn = playerId === currentTurnPlayer;
-
-  hitBtn.disabled = !isMyTurn;
-  standBtn.disabled = !isMyTurn;
-}
-
-
-async function pollState() {
-  while (true) {
-    const res = await fetch("/state");
-    currentState = await res.json();
-    console.log("STATE:", currentState);
-    render();
-    await new Promise(r => setTimeout(r, 1000));
-  }
-}
-
-pollState();
-
+/* ===============================
+   RENDER ROUTER
+================================= */
 
 function render() {
   if (!currentState) return;
 
-  if (!currentState.gameStarted) {
+  // Not joined yet
+  if (!playerId) {
+    showJoin();
+    return;
+  }
+
+  const state = currentState.state;
+
+  if (state === "lobby") {
+    showLobby();
     renderLobby();
     return;
   }
 
+  showGame();
   renderGame();
 }
 
-function renderTurnTimer() {
-  const timerDiv = document.getElementById("timer");
+/* ===============================
+   SCREEN VISIBILITY
+================================= */
 
-  if (!currentState.turnEndsAt) {
-    timerDiv.innerText = "";
-    return;
-  }
-
-  const seconds = Math.max(
-    0,
-    Math.ceil((currentState.turnEndsAt - Date.now()) / 1000)
-  );
-
-  timerDiv.innerText = `Time left: ${seconds}s`;
+function showJoin() {
+  document.getElementById("joinScreen").style.display = "block";
+  document.getElementById("lobby").style.display = "none";
+  document.getElementById("game").style.display = "none";
 }
+
+function showLobby() {
+  document.getElementById("joinScreen").style.display = "none";
+  document.getElementById("lobby").style.display = "block";
+  document.getElementById("game").style.display = "none";
+}
+
+function showGame() {
+  document.getElementById("joinScreen").style.display = "none";
+  document.getElementById("lobby").style.display = "none";
+  document.getElementById("game").style.display = "block";
+}
+
+/* ===============================
+   LOBBY RENDER
+================================= */
 
 function renderLobby() {
   const lobbyList = document.getElementById("lobbyList");
   lobbyList.innerHTML = "";
 
   for (let id in currentState.players) {
-    const p = currentState.players[id];
-    lobbyList.innerHTML += `
-  <li ${id === playerId ? 'style="color:#00ffcc;"' : ""}>
-    ${p.name} ${id === playerId ? "(You)" : ""}
-  </li>`;
+    const player = currentState.players[id];
+
+    const li = document.createElement("li");
+    li.textContent = player.name;
+
+    lobbyList.appendChild(li);
   }
 }
+
+/* ===============================
+   GAME RENDER
+================================= */
 
 function renderGame() {
-  const playersDiv = document.getElementById("gamePlayers");
-  playersDiv.innerHTML = "";
-
-  const currentTurnPlayer =
-    currentState.turnOrder?.[currentState.currentTurnIndex];
-
-  for (let id in currentState.players) {
-    const p = currentState.players[id];
-
-    const isCurrent = id === currentTurnPlayer;
-
-    playersDiv.innerHTML += `
-    <div class="${isCurrent ? "current-turn" : ""}">
-      <strong>${p.name}</strong>
-      | Chips: ${p.chips}
-      | Bet: ${p.bet}
-      | Result: ${p.result || ""}
-
-      <div class="card-row">
-        ${p.hand.map(c =>
-          `<img class="card" src="${getCardImagePath(c)}">`).join("")}
-      </div>
-    </div>`;
-  }
-
-  // Dealer
-  const dealerDiv = document.getElementById("dealer");
-  dealerDiv.innerHTML = `
-  <div class="card-row">
-    ${currentState.dealer.hand.map((c, i) => {
-
-      // Hide first dealer card if round not over
-      if (!currentState.roundOver && i === 0) {
-        return `<img class="card" src="assets/back.png">`;
-      }
-
-      return `<img class="card" src="${getCardImagePath(c)}">`;
-    }).join("")}
-  </div>`;
-
-  handleTurnButtons(currentTurnPlayer);
-  renderTurnTimer();
+  renderDealer();
+  renderPlayers();
+  renderControls();
+  renderResults();
 }
 
+/* ===============================
+   DEALER RENDER
+================================= */
 
+function renderDealer() {
+  const dealerDiv = document.getElementById("dealerCards");
+  dealerDiv.innerHTML = "";
+
+  if (!currentState.dealer) return;
+
+  currentState.dealer.hand.forEach((card, index) => {
+    const img = document.createElement("img");
+
+    // Hide second card while playing
+    if (
+      currentState.state === "playing" &&
+      index === 1
+    ) {
+      img.src = "assets/back.png";
+    } else {
+      img.src = `assets/${card.value}_${card.suit}.png`;
+    }
+
+    img.classList.add("card");
+    dealerDiv.appendChild(img);
+  });
+}
+
+/* ===============================
+   PLAYERS RENDER
+================================= */
+
+function renderPlayers() {
+  const playersDiv = document.getElementById("playersArea");
+  playersDiv.innerHTML = "";
+
+  for (let id in currentState.players) {
+    const player = currentState.players[id];
+
+    const container = document.createElement("div");
+    container.classList.add("playerBox");
+
+    if (id === currentState.turnOrder?.[currentState.currentTurnIndex]) {
+      container.classList.add("activePlayer");
+    }
+
+    const title = document.createElement("h3");
+    title.textContent =
+      `${player.name} (Chips: ${player.chips})`;
+    container.appendChild(title);
+
+    const handDiv = document.createElement("div");
+
+    player.hand.forEach(card => {
+      const img = document.createElement("img");
+      img.src = `assets/${card.value}_${card.suit}.png`;
+      img.classList.add("card");
+      handDiv.appendChild(img);
+    });
+
+    container.appendChild(handDiv);
+
+    if (player.bet > 0) {
+      const betText = document.createElement("p");
+      betText.textContent = `Bet: ${player.bet}`;
+      container.appendChild(betText);
+    }
+
+    playersDiv.appendChild(container);
+  }
+}
+
+/* ===============================
+   CONTROLS RENDER
+================================= */
+
+function renderControls() {
+  const controls = document.getElementById("controls");
+
+  if (currentState.state === "betting") {
+    controls.style.display = "block";
+    document.getElementById("betControls").style.display = "block";
+    document.getElementById("actionControls").style.display = "none";
+    return;
+  }
+
+  if (
+    currentState.state === "playing" &&
+    currentState.turnOrder[currentState.currentTurnIndex] === playerId
+  ) {
+    controls.style.display = "block";
+    document.getElementById("betControls").style.display = "none";
+    document.getElementById("actionControls").style.display = "block";
+    return;
+  }
+
+  controls.style.display = "none";
+}
+
+/* ===============================
+   RESULTS RENDER
+================================= */
+
+function renderResults() {
+  const resultsDiv = document.getElementById("roundResults");
+  resultsDiv.innerHTML = "";
+
+  if (currentState.state !== "finished") return;
+
+  for (let id in currentState.players) {
+    const player = currentState.players[id];
+
+    const line = document.createElement("div");
+    line.classList.add("resultLine");
+
+    line.textContent =
+      `${player.name}: ${player.result.toUpperCase()} | Chips: ${player.chips}`;
+
+    resultsDiv.appendChild(line);
+  }
+}

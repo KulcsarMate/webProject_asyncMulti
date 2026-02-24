@@ -25,31 +25,22 @@
   </div>
 
   <section id="game">
-    <div class="section">
-      <h2>Place Bet</h2>
-      <input id="betInput" type="number" placeholder="Bet amount" />
+    <div id="dealerCards"></div>
+  <div id="playersArea"></div>
+
+  <div id="controls">
+    <div id="betControls">
+      <input id="betAmount" type="number" />
       <button onclick="placeBet()">Place Bet</button>
+    </div>
+
+    <div id="actionControls" style="display:none;">
+      <button onclick="hit()">Hit</button>
+      <button onclick="stand()">Stand</button>
+    </div>
   </div>
-  
-  <div class="section">
-    <h2>Your Turn</h2>
-    <button onclick="hit()">Hit</button>
-    <button onclick="stand()">Stand</button>
-  </div>
-  
-  <div class="section">
-    <h2 id="timer"></h2>
-  </div>
-  
-  <div class="section">
-    <h2>Dealer</h2>
-    <div id="dealer"></div>
-  </div>
-  
-  <div class="section">
-    <h2>Players</h2>
-    <div id="players"></div>
-  </div>
-</section>
+
+  <div id="roundResults"></div>
+  </section>
 </body>
 </html>
