@@ -1,35 +1,12 @@
-/* ===============================
-   GLOBAL STATE
-================================= */
-
 let playerId = null;
 let currentState = null;
 
-/* ===============================
-   POLLING (async / await)
-================================= */
-
-setInterval(fetchState, 1000);
-
-async function fetchState() {
-  try {
-    const res = await fetch("/state");
-    currentState = await res.json();
-    render();
-  } catch (err) {
-    console.error("Failed to fetch state:", err);
-  }
-}
-
-/* ===============================
-   JOIN GAME
-================================= */
-
+// ===============================
+// JOIN & START
+// ===============================
 async function joinGame() {
-  const nameInput = document.getElementById("playerName");
-  const name = nameInput.value.trim();
-
-  if (!name) return alert("Enter a name");
+  const name = document.getElementById("nameInput").value;
+  if (!name) return;
 
   const res = await fetch("/join", {
     method: "POST",
@@ -39,256 +16,233 @@ async function joinGame() {
 
   const data = await res.json();
   playerId = data.playerId;
-  currentState = data;
 
-  render();
+  document.getElementById("joinScreen").style.display = "none";
+  document.getElementById("lobby").style.display = "block";
 }
-
-/* ===============================
-   START GAME
-================================= */
 
 async function startGame() {
   await fetch("/start", { method: "POST" });
 }
 
-/* ===============================
-   BETTING
-================================= */
-
+// ===============================
+// BETTING
+// ===============================
 async function placeBet() {
-  const betInput = document.getElementById("betAmount");
-  const amount = parseInt(betInput.value);
-
-  if (!amount || amount <= 0) {
-    alert("Enter valid bet");
-    return;
-  }
-
-  await fetch("/place-bet", {
+  const amount = parseInt(document.getElementById("betInput").value);
+  const res = await fetch("/place-bet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      playerId,
-      amount
-    })
+    body: JSON.stringify({ playerId, amount })
   });
+
+  if (!res.ok) {
+    alert("Cannot bet (already bet or invalid amount)");
+  }
 }
 
-/* ===============================
-   HIT / STAND
-================================= */
-
+// ===============================
+// ACTIONS
+// ===============================
 async function hit() {
-  await fetch("/hit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ playerId })
-  });
+  await fetch("/hit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }) });
 }
 
 async function stand() {
-  await fetch("/stand", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ playerId })
-  });
+  await fetch("/stand", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }) });
 }
 
-/* ===============================
-   RENDER ROUTER
-================================= */
+// ===============================
+// POLLING
+// ===============================
+async function pollState() {
+  while (true) {
+    try {
+      const res = await fetch("/state");
+      currentState = await res.json();
+      render();
+    } catch (err) {
+      console.error("Failed to fetch state:", err);
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+pollState();
 
+// ===============================
+// RENDER
+// ===============================
 function render() {
   if (!currentState) return;
 
-  // Not joined yet
-  if (!playerId) {
-    showJoin();
-    return;
-  }
-
-  const state = currentState.state;
-
-  if (state === "lobby") {
-    showLobby();
+  if (currentState.state === "lobby") {
     renderLobby();
-    return;
+  } else {
+    renderGame();
   }
 
-  showGame();
-  renderGame();
+  renderTurnTimer();
+  renderNextRoundTimer();
 }
 
-/* ===============================
-   SCREEN VISIBILITY
-================================= */
-
-function showJoin() {
-  document.getElementById("joinScreen").style.display = "block";
-  document.getElementById("lobby").style.display = "none";
-  document.getElementById("game").style.display = "none";
-}
-
-function showLobby() {
-  document.getElementById("joinScreen").style.display = "none";
-  document.getElementById("lobby").style.display = "block";
-  document.getElementById("game").style.display = "none";
-}
-
-function showGame() {
-  document.getElementById("joinScreen").style.display = "none";
-  document.getElementById("lobby").style.display = "none";
-  document.getElementById("game").style.display = "block";
-}
-
-/* ===============================
-   LOBBY RENDER
-================================= */
-
+// ===============================
+// LOBBY
+// ===============================
 function renderLobby() {
+  document.getElementById("lobby").style.display = "block";
   const lobbyList = document.getElementById("lobbyList");
   lobbyList.innerHTML = "";
 
   for (let id in currentState.players) {
-    const player = currentState.players[id];
-
-    const li = document.createElement("li");
-    li.textContent = player.name;
-
-    lobbyList.appendChild(li);
+    const p = currentState.players[id];
+    lobbyList.innerHTML += `<li ${id===playerId?'style="color:#00ffcc;"':''}>${p.name}${id===playerId?' (You)':''}${p.isHost?' 👑':''}</li>`;
   }
 }
 
-/* ===============================
-   GAME RENDER
-================================= */
-
+// ===============================
+// GAME
+// ===============================
 function renderGame() {
-  renderDealer();
+  document.getElementById("lobby").style.display = "none";
+  document.getElementById("game").style.display = "block"; // 🔥 make sure the game section is visible
+
   renderPlayers();
+  renderDealer();
   renderControls();
-  renderResults();
 }
 
-/* ===============================
-   DEALER RENDER
-================================= */
-
-function renderDealer() {
-  const dealerDiv = document.getElementById("dealerCards");
-  dealerDiv.innerHTML = "";
-
-  if (!currentState.dealer) return;
-
-  currentState.dealer.hand.forEach((card, index) => {
-    const img = document.createElement("img");
-
-    // Hide second card while playing
-    if (
-      currentState.state === "playing" &&
-      index === 1
-    ) {
-      img.src = "assets/back.png";
-    } else {
-      img.src = `assets/${card.value}_${card.suit}.png`;
-    }
-
-    img.classList.add("card");
-    dealerDiv.appendChild(img);
-  });
-}
-
-/* ===============================
-   PLAYERS RENDER
-================================= */
-
+// Players layout
 function renderPlayers() {
-  const playersDiv = document.getElementById("playersArea");
+  const playersDiv = document.getElementById("players");
   playersDiv.innerHTML = "";
+  playersDiv.style.display = "flex";
+  playersDiv.style.flexWrap = "wrap";
+  playersDiv.style.gap = "20px";
+  playersDiv.style.justifyContent = "center";
+
+  const currentTurnPlayer = currentState.turnOrder?.[currentState.currentTurnIndex];
 
   for (let id in currentState.players) {
     const player = currentState.players[id];
-
-    const container = document.createElement("div");
-    container.classList.add("playerBox");
-
-    if (id === currentState.turnOrder?.[currentState.currentTurnIndex]) {
-      container.classList.add("activePlayer");
-    }
+    const box = document.createElement("div");
+    box.classList.add("playerBox");
+    if (id === currentTurnPlayer) box.classList.add("activePlayer");
+    if (player.isHost) box.classList.add("hostPlayer");
 
     const title = document.createElement("h3");
-    title.textContent =
-      `${player.name} (Chips: ${player.chips})`;
-    container.appendChild(title);
+    title.textContent = `${player.name} (Chips: ${player.chips})`;
+    box.appendChild(title);
 
     const handDiv = document.createElement("div");
+    handDiv.classList.add("card-row");
 
-    player.hand.forEach(card => {
+    player.hand.forEach((card, i) => {
       const img = document.createElement("img");
-      img.src = `assets/${card.value}_${card.suit}.png`;
       img.classList.add("card");
+
+      // Hide other players cards until round finishes
+      if (id !== playerId && currentState.state !== "finished") {
+        img.src = "assets/back.png";
+      } else {
+        img.src = `assets/${card.value}-${card.suit}.png`;
+      }
+
       handDiv.appendChild(img);
     });
 
-    container.appendChild(handDiv);
+    box.appendChild(handDiv);
+    playersDiv.appendChild(box);
 
-    if (player.bet > 0) {
-      const betText = document.createElement("p");
-      betText.textContent = `Bet: ${player.bet}`;
-      container.appendChild(betText);
+    const resultText = document.createElement("div");
+    if (currentState.state === "finished" && player.result) {
+      resultText.textContent = `Result: ${player.result}`;
+      resultText.style.marginTop = "5px";
+      resultText.style.fontWeight = "bold";
+      resultText.style.color = player.result === "Win" ? "#0f0" :
+                           player.result === "Lose" ? "#f00" : "#ff0";
     }
-
-    playersDiv.appendChild(container);
+    box.appendChild(resultText);
   }
 }
 
-/* ===============================
-   CONTROLS RENDER
-================================= */
+// Dealer
+function renderDealer() {
+  const dealerDiv = document.getElementById("dealer");
+  dealerDiv.innerHTML = ""; // clear everything
 
+  if (!currentState.dealer.hand || currentState.dealer.hand.length === 0) return;
+
+  const title = document.createElement("h3");
+  title.textContent = "Dealer";
+  dealerDiv.appendChild(title);
+
+  const row = document.createElement("div");
+  row.classList.add("card-row");
+
+  currentState.dealer.hand.forEach((card, i) => {
+    const img = document.createElement("img");
+    img.classList.add("card");
+
+    if (i === 0 && currentState.state !== "finished") img.src = "assets/back.png";
+    else img.src = `assets/${card.value}-${card.suit}.png`;
+
+    row.appendChild(img);
+  });
+
+  dealerDiv.appendChild(row);
+}
+
+// Controls
 function renderControls() {
-  const controls = document.getElementById("controls");
+  const betControls = document.getElementById("betControls");
+  const actionControls = document.getElementById("actionControls");
 
   if (currentState.state === "betting") {
-    controls.style.display = "block";
-    document.getElementById("betControls").style.display = "block";
-    document.getElementById("actionControls").style.display = "none";
-    return;
-  }
-
-  if (
-    currentState.state === "playing" &&
-    currentState.turnOrder[currentState.currentTurnIndex] === playerId
-  ) {
-    controls.style.display = "block";
-    document.getElementById("betControls").style.display = "none";
-    document.getElementById("actionControls").style.display = "block";
-    return;
-  }
-
-  controls.style.display = "none";
-}
-
-/* ===============================
-   RESULTS RENDER
-================================= */
-
-function renderResults() {
-  const resultsDiv = document.getElementById("roundResults");
-  resultsDiv.innerHTML = "";
-
-  if (currentState.state !== "finished") return;
-
-  for (let id in currentState.players) {
-    const player = currentState.players[id];
-
-    const line = document.createElement("div");
-    line.classList.add("resultLine");
-
-    line.textContent =
-      `${player.name}: ${player.result.toUpperCase()} | Chips: ${player.chips}`;
-
-    resultsDiv.appendChild(line);
+    const me = currentState.players[playerId];
+    betControls.style.display = me.bet > 0 ? "none" : "block";
+    actionControls.style.display = "none";
+  } else if (currentState.state === "playing") {
+    betControls.style.display = "none";
+    actionControls.style.display = "block";
+  } else {
+    betControls.style.display = "none";
+    actionControls.style.display = "none";
   }
 }
+
+// ===============================
+// TIMERS
+// ===============================
+
+function renderTurnTimer() {
+  const timerDiv = document.getElementById("turnTimer");
+  if (!currentState.turnEndsAt || currentState.state !== "playing") {
+    timerDiv.innerText = "";
+    return;
+  }
+  const seconds = Math.max(0, Math.ceil((currentState.turnEndsAt - Date.now())/1000));
+  timerDiv.innerText = `⏱ Time left: ${seconds}s`;
+}
+
+// Next-round countdown
+function renderNextRoundTimer() {
+  const timerDiv = document.getElementById("turnTimer");
+  if (!currentState.nextRoundStartsAt || currentState.state !== "finished") return;
+
+  const seconds = Math.max(0, Math.ceil((currentState.nextRoundStartsAt - Date.now()) / 1000));
+  timerDiv.innerText = `Next round in: ${seconds}s`;
+
+  // ✅ Only trigger fetch when countdown just hits 0
+  if (seconds === 0 && !timerDiv.dataset.startedNextRound) {
+    timerDiv.dataset.startedNextRound = "true"; // mark that we already sent request
+    fetch("/start-next-round", { method: "POST" });
+  }
+}
+
+// ===============================
+// Optional: update timer smoothly
+// ===============================
+setInterval(() => {
+  renderTurnTimer();
+  renderNextRoundTimer();
+}, 250);

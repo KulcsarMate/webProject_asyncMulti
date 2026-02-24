@@ -78,18 +78,51 @@ input {
    PLAYER PANELS
 ============================== */
 
-#players div {
-  background-color: #1a1a1a;
-  border: 1px solid #333;
-  margin: 8px;
-  padding: 10px;
+#playersArea {
+  display: flex;
+  flex-wrap: wrap;        /* wraps to new line if too many */
+  gap: 20px;              /* space between players */
+  justify-content: center; /* center players horizontally */
+}
+
+.playerBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: rgba(0,0,0,0.5);
+  padding: 8px;
   border-radius: 6px;
+  min-width: 120px;
+}
+
+.playerBox .card-row {
+  display: flex;
+  gap: 4px;
 }
 
 /* Highlight current turn */
 .current-turn {
   border: 1px solid #00ffcc;
   box-shadow: 0 0 10px #00ffcc55;
+}
+
+.hostPlayer {
+  border: 2px solid gold;
+  box-shadow: 0 0 10px gold;
+}
+
+.activePlayer {
+  border: 2px solid cyan;
+}
+
+.playerBox.activePlayer {
+  border: 2px solid cyan;
+  box-shadow: 0 0 10px cyan;
+}
+
+.playerBox.hostPlayer {
+  border: 2px solid gold;
+  box-shadow: 0 0 10px gold;
 }
 
 /* ==============================
@@ -126,9 +159,16 @@ DEALER AREA
 TIMER
 ============================== */
 
-#timer {
-  font-size: 1.4rem;
-  color: #ff4d4d;
-  text-shadow: 0 0 6px #ff000044;
+#turnTimer {
+  position: fixed;       /* floats on screen */
+  top: 10px;
+  left: 10px;
+  background-color: rgba(0,0,0,0.7);
+  color: #00ffcc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 18px;
+  z-index: 1000;
 }
 
