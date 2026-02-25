@@ -89,6 +89,7 @@ input {
   flex-wrap: wrap;        /* wraps to new line if too many */
   gap: 20px;              /* space between players */
   justify-content: center; /* center players horizontally */
+  margin-top: 30px;
 }
 
 .playerBox {
@@ -137,7 +138,7 @@ DEALER AREA
 
 #dealer {
   font-size: 1.2rem;
-  margin: 10px, 0px;
+  margin: 10px, 0px, 30px, 0px;
 }
 
 /* ==============================

@@ -136,6 +136,8 @@ app.post("/start", (req, res) => {
     };
   }
 
+  game.dealer.hand = [];
+
   game.state = "betting";
   res.json(game);
 });
@@ -274,9 +276,21 @@ function nextTurn() {
 }
 
 async function dealerPlay() {
+  game.state = "dealer";
+
+  // 🔥 First: reveal hidden card
+  const hiddenCard = game.dealer.hand.find(c => c.hidden);
+  if (hiddenCard) {
+    hiddenCard.hidden = false;
+  }
+
+  // Small delay so players SEE the flip
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // 🔥 Then start drawing normally
   while (handValue(game.dealer.hand) < 17) {
-    await delay(1000);
     game.dealer.hand.push(drawCard());
+    await new Promise(resolve => setTimeout(resolve, 800));
   }
 
   finishRound();
@@ -299,21 +313,45 @@ async function finishRound() {
     } else player.result = "Lose";
     if (player.chips <= 0) {
      player.eliminated = true;
-}
+    }
   }
 
   const activePlayers = Object.values(game.players).filter(p => !p.eliminated);
-  if (activePlayers.length === 1) {
-    game.state = "lobby";
+  if (activePlayers.length === 1 && Object.values(game.players).length !== 1) {
+    game.state = "finished";
     game.message = `${activePlayers[0].name} wins the table!`;
-    resetTable();
+    
+    // Give players 6 seconds to view dealer cards
+    setTimeout(() => {
+      game.state = "lobby";
+      game.message = "";
+    }, 6000);
+    
     return;
   }
   if (activePlayers.length === 0) {
     game.state = "lobby";
-    game.message = `The table is a draw!`;
+    let msg = "";
+    if (Object.values(game.players).length === 1) {
+      msg = "You ran out of chips."
+    }
+    else{
+      msg = `The table is a draw!`
+    }
+    game.message = msg;
     resetTable();
-    return;
+    
+    // Give players 6 seconds to view dealer cards
+    const ret = new Promise(resolve => setTimeout(() => {
+      game.state = "lobby";
+      game.message = "";
+      resolve;
+    }, 6000)) 
+    
+
+    ret.then(x => {
+      return;
+    });
   }
 
   game.state = "finished";
