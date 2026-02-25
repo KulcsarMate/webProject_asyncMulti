@@ -89,11 +89,12 @@ function delay(ms) {
 app.post("/join", (req, res) => {
   const { name } = req.body;
   
-  console.log(name + game.state)
+  console.log(name + " tried to join")
   if (!name || (game.state !== "join" && game.state !== "lobby")) return res.sendStatus(400);
-  
+  console.log("success")
+
   game.state = "lobby";
-  const playerId = Date.now().toString();
+  const playerId = crypto.randomUUID();
   const isFirstPlayer = Object.keys(game.players).length === 0;
 
   game.players[playerId] = {
@@ -105,6 +106,7 @@ app.post("/join", (req, res) => {
     result: null,
     stood: false,
     busted: false,
+    eliminated: false,
     isHost: isFirstPlayer
   };
 
@@ -119,6 +121,21 @@ app.post("/start", (req, res) => {
   if (!game.players[playerId]?.isHost) return res.sendStatus(403);
   if (game.state !== "lobby") return res.sendStatus(400);
 
+  for (let id in game.players) {
+    game.players[id] = {
+      id: id,
+      name: game.players[id].name,
+      chips: 1000,
+      bet: 0,
+      hand: [],
+      result: null,
+      stood: false,
+      busted: false,
+      eliminated: false,
+      isHost: game.players[id].isHost
+    };
+  }
+
   game.state = "betting";
   res.json(game);
 });
@@ -128,6 +145,7 @@ app.post("/place-bet", (req, res) => {
   const { playerId, amount } = req.body;
   const player = game.players[playerId];
 
+  if (player.eliminated) return res.sendStatus(403);
   if (!player || game.state !== "betting") return res.sendStatus(400);
   if (player.bet > 0) return res.sendStatus(400);
   if (amount > player.chips) return res.sendStatus(400);
@@ -135,7 +153,9 @@ app.post("/place-bet", (req, res) => {
   player.bet = amount;
   player.chips -= amount;
 
-  const allBet = Object.values(game.players).every(p => p.bet > 0);
+  const allBet = Object.values(game.players)
+  .filter(p => !p.eliminated)
+  .every(p => p.bet > 0);
   if (allBet) startRound();
 
   res.json(game);
@@ -174,31 +194,6 @@ app.post("/stand", (req, res) => {
   res.json(game);
 });
 
-// Start next round after countdown
-// app.post("/start-next-round", (req, res) => {
-//   if (game.state !== "finished") return res.sendStatus(400);
-
-//   // Clear player round data
-//   for (let id in game.players) {
-//     const player = game.players[id];
-//     player.hand = [];
-//     player.result = null;
-//     player.bet = 0;
-//     player.stood = false;
-//     player.busted = false;
-//   }
-
-//   // Clear dealer
-//   game.dealer.hand = [];
-
-//   // 🔥 FULL RESET OF TURN SYSTEM
-//   resetRoundState();
-//   game.nextRoundStartsAt = null;
-//   game.state = "betting";
-
-//   res.json(game);
-// });
-
 // Get current state
 app.get("/state", (req, res) => res.json(game));
 
@@ -221,17 +216,20 @@ function startRound() {
 
   // Deal 2 cards to each player
   for (let id in game.players) {
-    const player = game.players[id];
-    player.hand = [];
-    player.result = null;
-    player.busted = false;
-    player.stood = false;
+  const player = game.players[id];
 
-    player.hand.push(drawCard());
-    player.hand.push(drawCard());
+  if (player.eliminated) continue; // 🔥 skip broke players
 
-    game.turnOrder.push(id);
-  }
+  player.hand = [];
+  player.result = null;
+  player.busted = false;
+  player.stood = false;
+
+  player.hand.push(drawCard());
+  player.hand.push(drawCard());
+
+  game.turnOrder.push(id);
+}
 
   // Dealer 2 cards
   game.dealer.hand.push(drawCard());
@@ -299,6 +297,23 @@ async function finishRound() {
       player.result = "Push";
       player.chips += player.bet;
     } else player.result = "Lose";
+    if (player.chips <= 0) {
+     player.eliminated = true;
+}
+  }
+
+  const activePlayers = Object.values(game.players).filter(p => !p.eliminated);
+  if (activePlayers.length === 1) {
+    game.state = "lobby";
+    game.message = `${activePlayers[0].name} wins the table!`;
+    resetTable();
+    return;
+  }
+  if (activePlayers.length === 0) {
+    game.state = "lobby";
+    game.message = `The table is a draw!`;
+    resetTable();
+    return;
   }
 
   game.state = "finished";
@@ -311,6 +326,12 @@ async function finishRound() {
 }
 
 function startNextRound() {
+  resetTable()
+
+  game.state = "betting";
+}
+
+function resetTable() {
   // Reset players
   for (let id in game.players) {
     const player = game.players[id];
@@ -327,10 +348,8 @@ function startNextRound() {
   game.currentTurnIndex = 0;
   game.turnEndsAt = null;
   game.nextRoundStartsAt = null;
-
-  game.state = "betting";
 }
- 
+
 // ===============================
 // SERVER
 // ===============================

@@ -26,6 +26,12 @@ h1 {
    PANELS
 ============================== */
 
+#tableMessage {
+  font-weight: bold;
+  font-size: x-large;
+  color: chartreuse;
+}
+
 .section {
   background-color: #141414;
   border: 1px solid #2a2a2a;
@@ -131,7 +137,7 @@ DEALER AREA
 
 #dealer {
   font-size: 1.2rem;
-  margin-top: 10px;
+  margin: 10px, 0px;
 }
 
 /* ==============================

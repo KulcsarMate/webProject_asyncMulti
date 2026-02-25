@@ -93,10 +93,20 @@ pollState();
 function render() {
   if (!currentState) return;
 
+  if (currentState.state === "join") {
+    return; // still waiting for player to join
+  }
+
   if (currentState.state === "lobby") {
     renderLobby();
   } else {
     renderGame();
+  }
+
+  if (currentState.message && currentState.state === "lobby") {
+    const msgDiv = document.getElementById("tableMessage");
+    msgDiv.innerText = currentState.message;
+    msgDiv.style.display = "block";
   }
 
   renderTurnTimer();
@@ -108,6 +118,7 @@ function render() {
 // ===============================
 function renderLobby() {
   document.getElementById("lobby").style.display = "block";
+  document.getElementById("game").style.display = "none";
 
   const lobbyList = document.getElementById("lobbyList");
   lobbyList.innerHTML = "";
@@ -140,6 +151,7 @@ function renderLobby() {
 function renderGame() {
   document.getElementById("lobby").style.display = "none";
   document.getElementById("game").style.display = "block"; // 🔥 make sure the game section is visible
+  document.getElementById("tableMessage").style.display = "none";
 
   renderPlayers();
   renderDealer();
@@ -184,6 +196,10 @@ function renderPlayers() {
 
       handDiv.appendChild(img);
     });
+
+    if (player.eliminated) {
+    title.textContent = `${player.name} (💀 BROKE)`;
+  }
 
     box.appendChild(handDiv);
     playersDiv.appendChild(box);
@@ -232,7 +248,7 @@ function renderControls() {
   const betControls = document.getElementById("betControls");
   const player = currentState.players[playerId];
 
-  if (currentState.state === "betting" && player.bet === 0) {
+  if (currentState.state === "betting" && player.bet === 0 && !player.eliminated) {
     betControls.style.display = "block";
   } else {
     betControls.style.display = "none";
