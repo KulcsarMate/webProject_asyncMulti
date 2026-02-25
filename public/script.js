@@ -22,7 +22,11 @@ async function joinGame() {
 }
 
 async function startGame() {
-  await fetch("/start", { method: "POST" });
+  await fetch("/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId })
+  });
 }
 
 // ===============================
@@ -39,6 +43,20 @@ async function placeBet() {
   if (!res.ok) {
     alert("Cannot bet (already bet or invalid amount)");
   }
+}
+
+function handleTurnButtons(currentTurnPlayer) {
+  const hitBtn = document.getElementById("hitBtn");
+  const standBtn = document.getElementById("standBtn");
+  const actionControls = document.getElementById("actionControls");
+
+  const isMyTurn = playerId === currentTurnPlayer;
+
+  hitBtn.disabled = !isMyTurn;
+  standBtn.disabled = !isMyTurn;
+
+  // 🔥 Only show the action div if it's your turn
+  actionControls.style.display = isMyTurn ? "block" : "none";
 }
 
 // ===============================
@@ -90,12 +108,29 @@ function render() {
 // ===============================
 function renderLobby() {
   document.getElementById("lobby").style.display = "block";
+
   const lobbyList = document.getElementById("lobbyList");
   lobbyList.innerHTML = "";
 
   for (let id in currentState.players) {
     const p = currentState.players[id];
-    lobbyList.innerHTML += `<li ${id===playerId?'style="color:#00ffcc;"':''}>${p.name}${id===playerId?' (You)':''}${p.isHost?' 👑':''}</li>`;
+
+    lobbyList.innerHTML += `
+      <li ${id === playerId ? 'style="color:#00ffcc;"' : ""}>
+        ${p.name}
+        ${id === playerId ? " (You)" : ""}
+        ${p.isHost ? " 👑" : ""}
+      </li>
+    `;
+  }
+
+  const startBtn = document.getElementById("startBtn");
+
+  // 🔥 Only host sees Start button
+  if (currentState.players[playerId]?.isHost) {
+    startBtn.style.display = "inline-block";
+  } else {
+    startBtn.style.display = "none";
   }
 }
 
@@ -195,19 +230,15 @@ function renderDealer() {
 // Controls
 function renderControls() {
   const betControls = document.getElementById("betControls");
-  const actionControls = document.getElementById("actionControls");
+  const player = currentState.players[playerId];
 
-  if (currentState.state === "betting") {
-    const me = currentState.players[playerId];
-    betControls.style.display = me.bet > 0 ? "none" : "block";
-    actionControls.style.display = "none";
-  } else if (currentState.state === "playing") {
-    betControls.style.display = "none";
-    actionControls.style.display = "block";
+  if (currentState.state === "betting" && player.bet === 0) {
+    betControls.style.display = "block";
   } else {
     betControls.style.display = "none";
-    actionControls.style.display = "none";
   }
+
+  handleTurnButtons(currentState.turnOrder?.[currentState.currentTurnIndex]);
 }
 
 // ===============================
@@ -235,7 +266,7 @@ function renderNextRoundTimer() {
   // ✅ Only trigger fetch when countdown just hits 0
   if (seconds === 0 && !timerDiv.dataset.startedNextRound) {
     timerDiv.dataset.startedNextRound = "true"; // mark that we already sent request
-    fetch("/start-next-round", { method: "POST" });
+    // fetch("/start-next-round", { method: "POST" });
   }
 }
 

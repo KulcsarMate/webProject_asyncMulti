@@ -88,9 +88,10 @@ function delay(ms) {
 // Join the game
 app.post("/join", (req, res) => {
   const { name } = req.body;
-
-  if (!name || game.state !== "join") return res.sendStatus(400);
-
+  
+  console.log(name + game.state)
+  if (!name || (game.state !== "join" && game.state !== "lobby")) return res.sendStatus(400);
+  
   game.state = "lobby";
   const playerId = Date.now().toString();
   const isFirstPlayer = Object.keys(game.players).length === 0;
@@ -112,8 +113,11 @@ app.post("/join", (req, res) => {
 
 // Start the first round (after lobby)
 app.post("/start", (req, res) => {
+  const { playerId } = req.body;
+
+  if (!playerId) return res.sendStatus(400);
+  if (!game.players[playerId]?.isHost) return res.sendStatus(403);
   if (game.state !== "lobby") return res.sendStatus(400);
-  if (Object.keys(game.players).length < 1) return res.sendStatus(400);
 
   game.state = "betting";
   res.json(game);
@@ -171,20 +175,29 @@ app.post("/stand", (req, res) => {
 });
 
 // Start next round after countdown
-app.post("/start-next-round", (req, res) => {
-  if (game.state !== "finished") return res.sendStatus(400);
+// app.post("/start-next-round", (req, res) => {
+//   if (game.state !== "finished") return res.sendStatus(400);
 
-  // Clear hands now
-  for (let id in game.players) {
-    game.players[id].hand = [];
-    game.players[id].result = null;
-  }
+//   // Clear player round data
+//   for (let id in game.players) {
+//     const player = game.players[id];
+//     player.hand = [];
+//     player.result = null;
+//     player.bet = 0;
+//     player.stood = false;
+//     player.busted = false;
+//   }
 
-  game.dealer.hand = [];
-  game.state = "betting";
-  game.nextRoundStartsAt = null;
-  res.json(game);
-});
+//   // Clear dealer
+//   game.dealer.hand = [];
+
+//   // 🔥 FULL RESET OF TURN SYSTEM
+//   resetRoundState();
+//   game.nextRoundStartsAt = null;
+//   game.state = "betting";
+
+//   res.json(game);
+// });
 
 // Get current state
 app.get("/state", (req, res) => res.json(game));
@@ -198,12 +211,12 @@ app.get("/", (req, res) => res.send("Server is working!"));
 
 function startRound() {
   game.state = "playing";
+  resetRoundState()
+
   game.deck = createDeck();
   shuffle(game.deck);
 
   game.dealer.hand = [];
-  game.turnOrder = [];
-  game.currentTurnIndex = 0;
   game.roundOver = false;
 
   // Deal 2 cards to each player
@@ -226,6 +239,12 @@ function startRound() {
 
   // Start first turn timer
   startTurnTimer();
+}
+
+function resetRoundState() {
+  game.turnOrder = [];
+  game.currentTurnIndex = 0;
+  game.turnEndsAt = null;
 }
 
 function startTurnTimer() {
@@ -280,17 +299,39 @@ async function finishRound() {
       player.result = "Push";
       player.chips += player.bet;
     } else player.result = "Lose";
-
-    player.bet = 0;
-    // 🔥 DO NOT clear hand here anymore
-    // player.hand = [];
   }
 
   game.state = "finished";
-  game.nextRoundStartsAt = Date.now() + 5000; // 5 sec until next round
+  game.nextRoundStartsAt = Date.now() + 5000;
+
+  // 🔥 SERVER controls next round automatically
+  setTimeout(() => {
+    startNextRound();
+  }, 5000);
+}
+
+function startNextRound() {
+  // Reset players
+  for (let id in game.players) {
+    const player = game.players[id];
+    player.hand = [];
+    player.result = null;
+    player.bet = 0;
+    player.stood = false;
+    player.busted = false;
+  }
+
+  game.dealer.hand = [];
+
+  game.turnOrder = [];
+  game.currentTurnIndex = 0;
+  game.turnEndsAt = null;
+  game.nextRoundStartsAt = null;
+
+  game.state = "betting";
 }
  
 // ===============================
 // SERVER
 // ===============================
-app.listen(3000, () => console.log("Server running on http://localhost:3000"));
+app.listen(3210, () => console.log("Server running on http://localhost:3210"));
