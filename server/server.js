@@ -309,88 +309,127 @@ async function dealerPlay() {
 
 function finishRound() {
   try {
-    const resultMessage = calculateResults(); // returns string
+    // ✅ Calculate results and update chips
+    const resultMessage = calculateResultsAndPayouts(); // returns string
+
     game.tableMessage = resultMessage;
     game.state = "finished";
-
     io.emit("gameState", game);
 
+    // ✅ Wait 4 seconds, then handle game-over or next round
     delay(4000)
-      .then(() => {
-        checkForGameOver();
-      })
-      .then(() => {
-        resetToLobbyIfNeeded();
-      })
-      .catch((err) => {
-        console.error("Finish round error:", err);
-      });
+      .then(() => checkForGameOver())
+      .then(() => resetToLobbyIfNeeded())
+      .catch(err => console.error("finishRound error:", err));
 
   } catch (err) {
     console.error("Critical finishRound error:", err);
   }
 }
 
-function checkForGameOver() {
-  const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
+// -----------------------------
+// Updated results function with payouts
+// -----------------------------
+function calculateResultsAndPayouts() {
+  const dealerScore = handValue(game.dealer.hand);
 
-  if (activePlayers.length <= 1) {
-    if (activePlayers.length === 1) {
-      game.tableMessage = `${activePlayers[0].name} wins the table!`;
+  Object.values(game.players).forEach(player => {
+    const score = handValue(player.hand);
+
+    if (player.busted) {
+      player.result = "Busted";
+      // player already lost bet when placed
+    } else if (dealerScore > 21 || score > dealerScore) {
+      player.result = "Win";
+      player.chips += player.bet * 2; // give back bet + winnings
+    } else if (score === dealerScore) {
+      player.result = "Push";
+      player.chips += player.bet; // give back bet
     } else {
-      game.tableMessage = "No players left with chips. Table ends in a draw.";
+      player.result = "Lose";
+      // player already lost bet
     }
 
-    io.emit("gameState", game);
+    // Reset bet for next round
+    player.bet = 0;
+  });
 
-    return delay(4000); // 🔥 return promise
-  }
+  // Determine table message
+  const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
+  if (activePlayers.length === 0) return "Everyone busted! Table ends in a draw.";
+  if (activePlayers.length === 1) return `${activePlayers[0].name} wins the table!`;
 
-  return Promise.resolve();
+  // Multi-player round message
+  return "Round finished!";
+}
+
+function checkForGameOver() {
+  return new Promise((resolve) => {
+    const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
+
+    if (activePlayers.length <= 1) {
+      if (activePlayers.length === 1) {
+        game.tableMessage = `${activePlayers[0].name} wins the table!`;
+      } else {
+        game.tableMessage = "No players left with chips. Table ends in a draw.";
+      }
+
+      io.emit("gameState", game);
+
+      // Wait 4 seconds before resolving so players see message
+      delay(4000).then(resolve);
+    } else {
+      resolve(); // table still has active players
+    }
+  });
 }
 
 function resetToLobbyIfNeeded() {
-  const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
+  return new Promise((resolve) => {
+    const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
 
-  if (activePlayers.length <= 1) {
-    game.state = "lobby";
-    game.players = activePlayers;
-    game.tableMessage = "";
-    io.emit("gameState", game);
-  } else {
-    startNextRound();
-  }
-}
-
-function calculateResults() {
-  const activePlayers = Object.values(game.players).filter(p => !p.eliminated);
-
-  if (activePlayers.length === 0) {
-    return "Everyone busted! Table ends in a draw.";
-  }
-
-  if (activePlayers.length === 1) {
-    return `${activePlayers[0].name} wins the table!`;
-  }
-
-  // Example multi-player result logic
-  const winner = determineWinnerSomehow();
-
-  if (!winner) {
-    return "It's a draw!";
-  }
-
-  return `${winner.name} wins the round!`;
+    if (activePlayers.length <= 1) {
+      game.state = "lobby";
+      game.tableMessage = "";
+      // do NOT overwrite game.players
+      io.emit("gameState", game);
+      resolve();
+    } else {
+      startNextRound();
+      resolve();
+    }
+  });
 }
 
 function startNextRound() {
-  resetTable()
+  resetRoundData();       // only resets per-round data
+  game.state = "betting"; // start next round normally
+  io.emit("gameState", game);
+}
 
-  game.state = "betting";
+function resetRoundData() {
+  for (let id in game.players) {
+    const player = game.players[id];
+    player.hand = [];
+    player.result = null;
+    player.bet = 0;
+    player.stood = false;
+    player.busted = false;
+    player.isHost = game.players[id].isHost;
+    player.eliminated = game.players[id].eliminated;
+    player.chips = game.players[id].chips
+    // Do NOT reset chips or isHost or eliminated status
+  }
+
+  game.dealer.hand = [];
+  game.turnOrder = [];
+  game.currentTurnIndex = 0;
+  game.turnEndsAt = null;
+  game.nextRoundStartsAt = null;
+  game.tableMessage = "";
 }
 
 function resetTable() {
-  // Reset players
   for (let id in game.players) {
     const player = game.players[id];
     player.hand = [];
@@ -399,9 +438,7 @@ function resetTable() {
     player.stood = false;
     player.busted = false;
   }
-
   game.dealer.hand = [];
-
   game.turnOrder = [];
   game.currentTurnIndex = 0;
   game.turnEndsAt = null;
