@@ -15,10 +15,17 @@ async function joinGame() {
   });
 
   const data = await res.json();
-  playerId = data.playerId;
+  
+  // 1. Save the ID globally immediately
+  playerId = data.playerId; 
+  // 2. Sync the current state returned by the fetch
+  currentState = data; 
 
   document.getElementById("joinScreen").style.display = "none";
   document.getElementById("lobby").style.display = "block";
+  
+  // 3. Manually trigger a render so we don't wait for the next socket pulse
+  render();
 }
 
 async function startGame() {
@@ -73,44 +80,49 @@ async function stand() {
 // ===============================
 // POLLING
 // ===============================
-async function pollState() {
-  while (true) {
-    try {
-      const res = await fetch("/state");
-      currentState = await res.json();
-      render();
-    } catch (err) {
-      console.error("Failed to fetch state:", err);
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-}
-pollState();
+// Remove pollState();
+
+socket.on("connect", () => {
+  console.log("Connected to server");
+  // Optional: You can emit a 'requestState' here if your server supports it,
+  // but usually, a good server setup emits the state to new connections automatically.
+});
+
+socket.on("gameState", (data) => {
+  currentState = data;
+  render();
+});
 
 // ===============================
 // RENDER
 // ===============================
 function render() {
-  if (!currentState) return;
+  if (!currentState || !currentState.state) return;
 
-  if (currentState.state === "join") {
-    return; // still waiting for player to join
+  const msgDiv = document.getElementById("tableMessage");
+
+  // Logic: Show if message exists AND we aren't in a state where it's irrelevant
+  if (currentState.tableMessage && currentState.tableMessage !== "") {
+    msgDiv.innerText = currentState.tableMessage;
+    msgDiv.style.display = "block";
+  } else {
+    msgDiv.style.display = "none";
+    msgDiv.innerText = ""; // Clear text to be safe
   }
 
   if (currentState.state === "lobby") {
     renderLobby();
+    document.getElementById("game").style.display = "none";
+    document.getElementById("lobby").style.display = "block";
   } else {
+    document.getElementById("lobby").style.display = "none";
+    document.getElementById("game").style.display = "block";
+    
+    // 🔥 Remove the line that says: 
+    // document.getElementById("tableMessage").style.display = "none";
+    // inside renderGame() so it doesn't fight with the logic above.
     renderGame();
   }
-
-  if (currentState.message && currentState.state === "lobby") {
-    const msgDiv = document.getElementById("tableMessage");
-    msgDiv.innerText = currentState.message;
-    msgDiv.style.display = "block";
-  }
-
-  renderTurnTimer();
-  renderNextRoundTimer();
 }
 
 // ===============================
@@ -149,9 +161,17 @@ function renderLobby() {
 // GAME
 // ===============================
 function renderGame() {
+  const player = currentState.players[playerId];
+  
+  // Only show the "You are broke" message if the round is actually over 
+  // and they didn't win anything back.
+  if (player && player.chips <= 0 && currentState.state === "betting") {
+     document.getElementById("tableMessage").innerText = "You are out of chips!";
+     document.getElementById("tableMessage").style.display = "block";
+  }
+
   document.getElementById("lobby").style.display = "none";
-  document.getElementById("game").style.display = "block"; // 🔥 make sure the game section is visible
-  document.getElementById("tableMessage").style.display = "none";
+  document.getElementById("game").style.display = "block";
 
   renderPlayers();
   renderDealer();
@@ -249,15 +269,29 @@ function renderDealer() {
 // Controls
 function renderControls() {
   const betControls = document.getElementById("betControls");
+  const actionControls = document.getElementById("actionControls");
   const player = currentState.players[playerId];
 
+  if (!player) return;
+
+  // 1. Show betting UI ONLY during betting phase
   if (currentState.state === "betting" && player.bet === 0 && !player.eliminated) {
     betControls.style.display = "block";
   } else {
     betControls.style.display = "none";
   }
 
-  handleTurnButtons(currentState.turnOrder?.[currentState.currentTurnIndex]);
+  // 2. Show Action UI ONLY during playing phase AND when it's your turn
+  const currentTurnId = currentState.turnOrder?.[currentState.currentTurnIndex];
+  if (currentState.state === "playing" && currentTurnId === playerId) {
+    actionControls.style.display = "block";
+    
+    // Enable/Disable buttons based on turn
+    document.getElementById("hitBtn").disabled = false;
+    document.getElementById("standBtn").disabled = false;
+  } else {
+    actionControls.style.display = "none";
+  }
 }
 
 // ===============================
@@ -293,6 +327,9 @@ function renderNextRoundTimer() {
 // Optional: update timer smoothly
 // ===============================
 setInterval(() => {
-  renderTurnTimer();
-  renderNextRoundTimer();
+  // Only try to update timers if we actually have game data
+  if (currentState) {
+    renderTurnTimer();
+    renderNextRoundTimer();
+  }
 }, 250);

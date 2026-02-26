@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const crypto = require("crypto");
 const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
@@ -122,7 +123,6 @@ app.post("/join", (req, res) => {
   res.json({ playerId, ...game });
 });
 
-// Start the first round (after lobby)
 app.post("/start", (req, res) => {
   const { playerId } = req.body;
 
@@ -130,24 +130,18 @@ app.post("/start", (req, res) => {
   if (!game.players[playerId]?.isHost) return res.sendStatus(403);
   if (game.state !== "lobby") return res.sendStatus(400);
 
+  // Reset player stats for the beginning of the match
   for (let id in game.players) {
-    game.players[id] = {
-      id: id,
-      name: game.players[id].name,
-      chips: 1000,
-      bet: 0,
-      hand: [],
-      result: null,
-      stood: false,
-      busted: false,
-      eliminated: false,
-      isHost: game.players[id].isHost
-    };
+    game.players[id].chips = 1000;
+    game.players[id].bet = 0;
+    game.players[id].hand = [];
+    game.players[id].eliminated = false;
   }
 
   game.dealer.hand = [];
-
   game.state = "betting";
+  game.tableMessage = ""; // 👈 Clear the "Game Over" message here
+  io.emit("gameState", game);
   res.json(game);
 });
 
@@ -156,18 +150,23 @@ app.post("/place-bet", (req, res) => {
   const { playerId, amount } = req.body;
   const player = game.players[playerId];
 
-  if (player.eliminated) return res.sendStatus(403);
   if (!player || game.state !== "betting") return res.sendStatus(400);
-  if (player.bet > 0) return res.sendStatus(400);
-  if (amount > player.chips) return res.sendStatus(400);
+  if (player.bet > 0 || amount > player.chips) return res.sendStatus(400);
 
   player.bet = amount;
   player.chips -= amount;
 
   const allBet = Object.values(game.players)
-  .filter(p => !p.eliminated)
-  .every(p => p.bet > 0);
-  if (allBet) startRound();
+    .filter(p => !p.eliminated)
+    .every(p => p.bet > 0);
+
+  if (allBet) {
+    startRound(); 
+    // The startRound function should handle the io.emit
+  } else {
+    // Just update everyone on the current bets
+    io.emit("gameState", game);
+  }
 
   res.json(game);
 });
@@ -184,9 +183,15 @@ app.post("/hit", (req, res) => {
   const player = game.players[playerId];
   player.hand.push(drawCard());
 
+  // Check for bust
   if (handValue(player.hand) > 21) {
     player.busted = true;
+    // We emit here, then nextTurn() will handle the next emit/timer
+    io.emit("gameState", game); 
     nextTurn();
+  } else {
+    // Just a normal hit, no bust. Tell everyone to show the new card.
+    io.emit("gameState", game);
   }
 
   res.json(game);
@@ -217,38 +222,29 @@ app.get("/", (req, res) => res.send("Server is working!"));
 
 function startRound() {
   game.state = "playing";
-  resetRoundState()
+  resetRoundState(); // Clears turnOrder, index, etc.
 
   game.deck = createDeck();
   shuffle(game.deck);
-
   game.dealer.hand = [];
-  game.roundOver = false;
 
-  // Deal 2 cards to each player
+  // Deal to active players
   for (let id in game.players) {
-  const player = game.players[id];
+    const player = game.players[id];
+    if (player.eliminated || player.bet === 0) continue;
 
-  if (player.eliminated) continue; // 🔥 skip broke players
+    player.hand = [drawCard(), drawCard()];
+    game.turnOrder.push(id); // Populate the order!
+  }
 
-  player.hand = [];
-  player.result = null;
-  player.busted = false;
-  player.stood = false;
-
-  player.hand.push(drawCard());
-  player.hand.push(drawCard());
-
-  game.turnOrder.push(id);
-}
-
-  // Dealer 2 cards
+  // Dealer cards
   const firstCard = drawCard();
   firstCard.hidden = true;
-  game.dealer.hand.push(firstCard);
-  game.dealer.hand.push(drawCard());
+  game.dealer.hand = [firstCard, drawCard()];
 
-  // Start first turn timer
+  // IMPORTANT: Tell the frontend the cards are dealt and turns started
+  io.emit("gameState", game);
+  
   startTurnTimer();
 }
 
@@ -280,8 +276,11 @@ function nextTurn() {
 
   if (game.currentTurnIndex >= game.turnOrder.length) {
     game.state = "dealer";
+    // dealerPlay handles its own emits for each card drawn
     dealerPlay();
   } else {
+    // Move to the next player
+    io.emit("gameState", game); 
     startTurnTimer();
   }
 }
@@ -289,42 +288,56 @@ function nextTurn() {
 async function dealerPlay() {
   game.state = "dealer";
 
-  // 🔥 First: reveal hidden card
+  // Reveal hidden card
   const hiddenCard = game.dealer.hand.find(c => c.hidden);
-  if (hiddenCard) {
-    hiddenCard.hidden = false;
-  }
+  if (hiddenCard) hiddenCard.hidden = false;
+  io.emit("gameState", game);
 
-  // Small delay so players SEE the flip
   await new Promise(resolve => setTimeout(resolve, 1000));
 
-  // 🔥 Then start drawing normally
+  // Draw cards until 17
   while (handValue(game.dealer.hand) < 17) {
     game.dealer.hand.push(drawCard());
+    io.emit("gameState", game); // Update clients so they see the draw
     await new Promise(resolve => setTimeout(resolve, 800));
   }
 
-  finishRound();
+  // TRIGGER THE FINISH
+  finishRound(); 
 }
 
 function finishRound() {
-  try {
-    // ✅ Calculate results and update chips
-    const resultMessage = calculateResultsAndPayouts(); // returns string
+  const resultMessage = calculateResultsAndPayouts();
+  game.tableMessage = resultMessage;
+  game.state = "finished";
+  io.emit("gameState", game);
 
-    game.tableMessage = resultMessage;
-    game.state = "finished";
+  delay(4000)
+  .then(() => {
+    const playersWithMoney = Object.values(game.players).filter(p => p.chips > 0);
+    
+    if (playersWithMoney.length === 0) {
+      // 1. Set the state to lobby
+      game.state = "lobby";
+      // 2. Set a specific final message
+      game.tableMessage = "GAME OVER: You've run out of chips!";
+      
+      // IMPORTANT: We do NOT call resetRoundData() here 
+      // because we want the final cards to stay visible 
+      // or at least not wipe the message immediately.
+    } else {
+      resetRoundData();
+      game.state = "betting";
+      game.tableMessage = "New Round! Place your bets.";
+    }
+    
     io.emit("gameState", game);
-
-    // ✅ Wait 4 seconds, then handle game-over or next round
-    delay(4000)
-      .then(() => checkForGameOver())
-      .then(() => resetToLobbyIfNeeded())
-      .catch(err => console.error("finishRound error:", err));
-
-  } catch (err) {
-    console.error("Critical finishRound error:", err);
-  }
+  })
+    .catch(err => {
+      console.error("FinishRound Chain Error:", err);
+      game.state = "lobby";
+      io.emit("gameState", game);
+    });
 }
 
 // -----------------------------
@@ -338,28 +351,28 @@ function calculateResultsAndPayouts() {
 
     if (player.busted) {
       player.result = "Busted";
-      // player already lost bet when placed
+      // No chips added back
     } else if (dealerScore > 21 || score > dealerScore) {
       player.result = "Win";
-      player.chips += player.bet * 2; // give back bet + winnings
+      player.chips += player.bet * 2; 
     } else if (score === dealerScore) {
       player.result = "Push";
-      player.chips += player.bet; // give back bet
+      player.chips += player.bet; 
     } else {
       player.result = "Lose";
-      // player already lost bet
     }
 
     // Reset bet for next round
     player.bet = 0;
+    
+    // Explicitly mark as eliminated ONLY if they still have 0 after winnings
+    if (player.chips <= 0) {
+        player.eliminated = true;
+    } else {
+        player.eliminated = false;
+    }
   });
 
-  // Determine table message
-  const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
-  if (activePlayers.length === 0) return "Everyone busted! Table ends in a draw.";
-  if (activePlayers.length === 1) return `${activePlayers[0].name} wins the table!`;
-
-  // Multi-player round message
   return "Round finished!";
 }
 
@@ -402,8 +415,9 @@ function resetToLobbyIfNeeded() {
 }
 
 function startNextRound() {
-  resetRoundData();       // only resets per-round data
-  game.state = "betting"; // start next round normally
+  resetRoundData(); 
+  game.state = "betting"; 
+  game.tableMessage = ""; // 👈 Ensure it's empty for the new bets
   io.emit("gameState", game);
 }
 
@@ -448,4 +462,6 @@ function resetTable() {
 // ===============================
 // SERVER
 // ===============================
-app.listen(3210, () => console.log("Server running on http://localhost:3210"));
+server.listen(3210, () => {
+  console.log("Server running on http://localhost:3210");
+});
