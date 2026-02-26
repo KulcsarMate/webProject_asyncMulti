@@ -1,7 +1,10 @@
 const express = require("express");
-const crypto = require("crypto");
-
+const http = require("http");
+const { Server } = require("socket.io");
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
 app.use(express.json());
 app.use(express.static("public"));
 
@@ -78,7 +81,13 @@ function handValue(hand) {
 }
 
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve, reject) => {
+    if (typeof ms !== "number") {
+      reject("Delay requires a number");
+    } else {
+      setTimeout(resolve, ms);
+    }
+  });
 }
 
 // ===============================
@@ -234,7 +243,9 @@ function startRound() {
 }
 
   // Dealer 2 cards
-  game.dealer.hand.push(drawCard());
+  const firstCard = drawCard();
+  firstCard.hidden = true;
+  game.dealer.hand.push(firstCard);
   game.dealer.hand.push(drawCard());
 
   // Start first turn timer
@@ -296,71 +307,80 @@ async function dealerPlay() {
   finishRound();
 }
 
-async function finishRound() {
-  const dealerScore = handValue(game.dealer.hand);
-
-  for (let id of game.turnOrder) {
-    const player = game.players[id];
-    const score = handValue(player.hand);
-
-    if (player.busted) player.result = "Busted";
-    else if (dealerScore > 21 || score > dealerScore) {
-      player.result = "Win";
-      player.chips += player.bet * 2;
-    } else if (score === dealerScore) {
-      player.result = "Push";
-      player.chips += player.bet;
-    } else player.result = "Lose";
-    if (player.chips <= 0) {
-     player.eliminated = true;
-    }
-  }
-
-  const activePlayers = Object.values(game.players).filter(p => !p.eliminated);
-  if (activePlayers.length === 1 && Object.values(game.players).length !== 1) {
+function finishRound() {
+  try {
+    const resultMessage = calculateResults(); // returns string
+    game.tableMessage = resultMessage;
     game.state = "finished";
-    game.message = `${activePlayers[0].name} wins the table!`;
-    
-    // Give players 6 seconds to view dealer cards
-    setTimeout(() => {
-      game.state = "lobby";
-      game.message = "";
-    }, 6000);
-    
-    return;
+
+    io.emit("gameState", game);
+
+    delay(4000)
+      .then(() => {
+        checkForGameOver();
+      })
+      .then(() => {
+        resetToLobbyIfNeeded();
+      })
+      .catch((err) => {
+        console.error("Finish round error:", err);
+      });
+
+  } catch (err) {
+    console.error("Critical finishRound error:", err);
   }
-  if (activePlayers.length === 0) {
+}
+
+function checkForGameOver() {
+  const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
+
+  if (activePlayers.length <= 1) {
+    if (activePlayers.length === 1) {
+      game.tableMessage = `${activePlayers[0].name} wins the table!`;
+    } else {
+      game.tableMessage = "No players left with chips. Table ends in a draw.";
+    }
+
+    io.emit("gameState", game);
+
+    return delay(4000); // 🔥 return promise
+  }
+
+  return Promise.resolve();
+}
+
+function resetToLobbyIfNeeded() {
+  const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
+
+  if (activePlayers.length <= 1) {
     game.state = "lobby";
-    let msg = "";
-    if (Object.values(game.players).length === 1) {
-      msg = "You ran out of chips."
-    }
-    else{
-      msg = `The table is a draw!`
-    }
-    game.message = msg;
-    resetTable();
-    
-    // Give players 6 seconds to view dealer cards
-    const ret = new Promise(resolve => setTimeout(() => {
-      game.state = "lobby";
-      game.message = "";
-      resolve;
-    }, 6000)) 
-    
+    game.players = activePlayers;
+    game.tableMessage = "";
+    io.emit("gameState", game);
+  } else {
+    startNextRound();
+  }
+}
 
-    ret.then(x => {
-      return;
-    });
+function calculateResults() {
+  const activePlayers = Object.values(game.players).filter(p => !p.eliminated);
+
+  if (activePlayers.length === 0) {
+    return "Everyone busted! Table ends in a draw.";
   }
 
-  game.state = "finished";
-  game.nextRoundStartsAt = Date.now() + 5000;
+  if (activePlayers.length === 1) {
+    return `${activePlayers[0].name} wins the table!`;
+  }
 
-  // 🔥 SERVER controls next round automatically
-  setTimeout(() => {
-    startNextRound();
-  }, 5000);
+  // Example multi-player result logic
+  const winner = determineWinnerSomehow();
+
+  if (!winner) {
+    return "It's a draw!";
+  }
+
+  return `${winner.name} wins the round!`;
 }
 
 function startNextRound() {

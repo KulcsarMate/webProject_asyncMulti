@@ -230,12 +230,15 @@ function renderDealer() {
   const row = document.createElement("div");
   row.classList.add("card-row");
 
-  currentState.dealer.hand.forEach((card, i) => {
+  currentState.dealer.hand.forEach((card) => {
     const img = document.createElement("img");
     img.classList.add("card");
 
-    if (i === 0 && currentState.state !== "finished") img.src = "assets/back.png";
-    else img.src = `assets/${card.value}-${card.suit}.png`;
+    if (card.hidden) {
+      img.src = "assets/back.png";
+    } else {
+      img.src = `assets/${card.value}-${card.suit}.png`;
+    }
 
     row.appendChild(img);
   });
