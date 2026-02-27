@@ -41,19 +41,27 @@ async function startGame() {
 // ===============================
 async function placeBet() {
   const betInput = document.getElementById("betInput");
-  // Force the input to be an integer before even sending
-  const amount = Math.floor(parseInt(betInput.value)); 
-  
-  if (isNaN(amount) || amount <= 0) {
-    alert("Please enter a valid whole number.");
+  const rawValue = betInput.value;
+  const amount = Number(rawValue); // Using Number() instead of parseInt to catch floats
+
+  // 🛡️ BLOCK MANUAL FLOATS
+  if (rawValue.includes(".") || !Number.isInteger(amount)) {
+    alert("Whole numbers only, please! No loose change at this table.");
+    return;
+  }
+
+  if (amount <= 0) {
+    alert("You must bet at least 1 chip.");
     return;
   }
   
+  const playerChips = currentState.players[playerId]?.chips || 0;
   if (amount > playerChips) {
     alert("You don't have enough chips!");
     return;
   }
 
+  // If we pass these checks, then we fetch
   const res = await fetch("/place-bet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

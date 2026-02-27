@@ -80,6 +80,16 @@ input {
   border-radius: 4px;
 }
 
+#lobbyList {
+  list-style: none; /* This removes the bullet points/dots */
+  padding-left: 0;  /* Standard ULs have a default left padding */
+}
+
+#lobbyList li {
+  margin-bottom: 5px; /* Adds a little breathing room between names */
+  font-family: sans-serif;
+}
+
 /* ==============================
    PLAYER PANELS
 ============================== */

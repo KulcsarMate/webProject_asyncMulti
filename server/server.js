@@ -349,18 +349,34 @@ function finishRound() {
   io.emit("gameState", game);
 
   delay(4000)
+  // Inside finishRound() ...
   .then(() => {
-    const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
-    if (activePlayers.length <= 1) {
-      // TRIGGER THE NEW CHAIN HERE
-      return prepareNewGame(); 
+    const allPlayers = Object.values(game.players);
+    const activePlayers = allPlayers.filter(p => p.chips > 0);
+
+  // Logic: 
+  // 1. If NO ONE has money, it's Game Over.
+  // 2. If there were multiple players, but only 1 is left, it's Game Over.
+  // 3. If there is only 1 player total in the game and they have money, KEEP PLAYING.
+  
+    const isGameOver = activePlayers.length === 0 || (allPlayers.length > 1 && activePlayers.length === 1);
+
+    if (isGameOver) {
+      game.state = "lobby";
+      if (activePlayers.length === 1) {
+        game.tableMessage = `GAME OVER: ${activePlayers[0].name} wins the table!`;
+      } else {
+        game.tableMessage = "GAME OVER: Everyone is broke!";
+      }
+    // Optional: use your prepareNewGame() chain here if you implemented it
     } else {
-      // Normal round transition
+    // Round transition for single player or multiple active players
       resetRoundData();
       game.state = "betting";
       game.tableMessage = "New Round! Place your bets.";
-      io.emit("gameState", game);
     }
+
+    io.emit("gameState", game);
   })
   .catch(err => {
     console.error("FinishRound Chain Error:", err);
