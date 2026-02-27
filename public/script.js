@@ -40,7 +40,20 @@ async function startGame() {
 // BETTING
 // ===============================
 async function placeBet() {
-  const amount = parseInt(document.getElementById("betInput").value);
+  const betInput = document.getElementById("betInput");
+  // Force the input to be an integer before even sending
+  const amount = Math.floor(parseInt(betInput.value)); 
+  
+  if (isNaN(amount) || amount <= 0) {
+    alert("Please enter a valid whole number.");
+    return;
+  }
+  
+  if (amount > playerChips) {
+    alert("You don't have enough chips!");
+    return;
+  }
+
   const res = await fetch("/place-bet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -49,6 +62,8 @@ async function placeBet() {
 
   if (!res.ok) {
     alert("Cannot bet (already bet or invalid amount)");
+  } else {
+    betInput.value = ""; // Clear input on success
   }
 }
 

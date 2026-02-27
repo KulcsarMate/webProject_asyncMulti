@@ -120,6 +120,7 @@ app.post("/join", (req, res) => {
     isHost: isFirstPlayer
   };
 
+  io.emit("gameState", game);
   res.json({ playerId, ...game });
 });
 
@@ -150,8 +151,14 @@ app.post("/place-bet", (req, res) => {
   const { playerId, amount } = req.body;
   const player = game.players[playerId];
 
-  if (!player || game.state !== "betting") return res.sendStatus(400);
-  if (player.bet > 0 || amount > player.chips) return res.sendStatus(400);
+  // 🛡️ Enforce Integer check
+  if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0) {
+    return res.status(400).send("Bets must be whole numbers.");
+  }
+
+  if (!player || game.state !== "betting" || amount > player.chips) {
+    return res.sendStatus(400);
+  }
 
   player.bet = amount;
   player.chips -= amount;
@@ -220,8 +227,37 @@ app.get("/", (req, res) => res.send("Server is working!"));
 // GAME LOGIC
 // ===============================
 
+function prepareNewGame() {
+  return Promise.resolve()
+    .then(() => {
+      console.log("Step 1: Clearing table visuals...");
+      resetRoundData(); // Wipes hands, bets, and dealer cards
+      return delay(500); // Small pause for dramatic effect
+    })
+    .then(() => {
+      console.log("Step 2: Resetting player chips and status...");
+      for (let id in game.players) {
+        let p = game.players[id];
+        p.chips = 1000;
+        p.eliminated = false;
+        p.result = null;
+      }
+      return delay(500);
+    })
+    .then(() => {
+      console.log("Step 3: Moving state to lobby.");
+      game.state = "lobby";
+      game.tableMessage = "Game Reset! Host can start whenever.";
+      io.emit("gameState", game);
+    })
+    .catch((err) => {
+      console.error("Reset Chain Failed:", err);
+    });
+}
+
 function startRound() {
   game.state = "playing";
+  game.tableMessage = "";
   resetRoundState(); // Clears turnOrder, index, etc.
 
   game.deck = createDeck();
@@ -314,30 +350,23 @@ function finishRound() {
 
   delay(4000)
   .then(() => {
-    const playersWithMoney = Object.values(game.players).filter(p => p.chips > 0);
-    
-    if (playersWithMoney.length === 0) {
-      // 1. Set the state to lobby
-      game.state = "lobby";
-      // 2. Set a specific final message
-      game.tableMessage = "GAME OVER: You've run out of chips!";
-      
-      // IMPORTANT: We do NOT call resetRoundData() here 
-      // because we want the final cards to stay visible 
-      // or at least not wipe the message immediately.
+    const activePlayers = Object.values(game.players).filter(p => p.chips > 0);
+    if (activePlayers.length <= 1) {
+      // TRIGGER THE NEW CHAIN HERE
+      return prepareNewGame(); 
     } else {
+      // Normal round transition
       resetRoundData();
       game.state = "betting";
       game.tableMessage = "New Round! Place your bets.";
-    }
-    
-    io.emit("gameState", game);
-  })
-    .catch(err => {
-      console.error("FinishRound Chain Error:", err);
-      game.state = "lobby";
       io.emit("gameState", game);
-    });
+    }
+  })
+  .catch(err => {
+    console.error("FinishRound Chain Error:", err);
+    game.state = "lobby";
+    io.emit("gameState", game);
+  });
 }
 
 // -----------------------------
